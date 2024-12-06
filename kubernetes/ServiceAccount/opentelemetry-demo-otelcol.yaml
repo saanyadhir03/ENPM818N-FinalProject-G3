@@ -6,4 +6,4 @@ metadata:
   labels:
     app.kubernetes.io/name: otelcol
     app.kubernetes.io/instance: opentelemetry-demo
-    app.kubernetes.io/version: "0.113.0"s
+    app.kubernetes.io/version: "0.113.0"
