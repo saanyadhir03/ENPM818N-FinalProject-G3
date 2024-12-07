@@ -1,0 +1,60 @@
+name: CI/CD Pipeline with AWS ECR and Kubernetes
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Build Docker Image and Push to ECR
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v3
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: Login to ECR
+      id: login-ecr
+      run: |
+        aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | \
+        docker login --username AWS --password-stdin 038462756869.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+
+    - name: Build and Push Docker Image to ECR
+      run: |
+        docker build -t otel-demo-app:${{ github.sha }} .
+        docker tag otel-demo-app:${{ github.sha }} 038462756869.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/otel-demo-app:${{ github.sha }}
+        docker push 038462756869.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/otel-demo-app:${{ github.sha }}
+
+  deploy:
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'v1.24.0'
+
+    - name: Configure Kubernetes Cluster
+      env:
+        KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
+      run: |
+        echo "$KUBE_CONFIG_DATA" | base64 --decode > kubeconfig
+        export KUBECONFIG=kubeconfig
+
+    - name: Deploy to Kubernetes
+      run: |
+        kubectl set image deployment/otel-demo-app otel-demo-app=038462756869.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/otel-demo-app:${{ github.sha }}
+        kubectl rollout status deployment/otel-demo-app
